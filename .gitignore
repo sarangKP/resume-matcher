@@ -1,0 +1,13 @@
+.aws-sam/
+__pycache__/
+testdata/
+payload.json
+.env
+.env.*
+*.pem
+*.key
+venv/
+.venv/
+.aws/
+.DS_Store
+frontend/config.js
