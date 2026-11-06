@@ -84,9 +84,9 @@ async def analyze(request: Request):
 
     if not isinstance(resume, str) or not isinstance(jd, str) or not resume or not jd:
         return JSONResponse({"error": "resume and jd are required"}, status_code=400)
-    MAX_CHARS = 20000
+    MAX_CHARS = 10000
     if len(resume) > MAX_CHARS or len(jd) > MAX_CHARS:
-        return JSONResponse({"error": "Text too long (max 20,000 characters each)."}, status_code=400)
+        return JSONResponse({"error": "Text too long (max 10,000 characters each)."}, status_code=400)
     
     h = make_hash(resume, jd)
     cached = get_cached(h)

@@ -6,6 +6,8 @@
 
 *Serverless, AWS only, with live streaming results.*
 
+**Live demo: https://dp2hedo686otb.cloudfront.net**
+
 <br>
 
 ![AWS Lambda](https://img.shields.io/badge/AWS-Lambda-FF9900?logo=awslambda&logoColor=white)
@@ -15,7 +17,9 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Gemini](https://img.shields.io/badge/LLM-Gemini-8E75B2?logo=googlegemini&logoColor=white)
 ![Groq](https://img.shields.io/badge/Fallback-Groq-F55036)
-![Status](https://img.shields.io/badge/Deployment-in%20progress-yellow)
+![S3](https://img.shields.io/badge/AWS-S3-569A31?logo=amazons3&logoColor=white)
+![CloudFront](https://img.shields.io/badge/AWS-CloudFront-8C4FFF?logo=amazoncloudfront&logoColor=white)
+![Status](https://img.shields.io/badge/Deployment-live-brightgreen)
 
 <br>
 
@@ -60,6 +64,8 @@ The result is streamed to the page as the model writes it, and the score bar ani
 
 ```mermaid
 flowchart LR
+    CF[CloudFront] -->|serves page| U
+    CF --- B[(S3 bucket<br/>private)]
     U[Browser<br/>HTML + JS + pdf.js] -->|POST resume + JD| F[Lambda Function URL]
     F --> A[FastAPI on Lambda<br/>via Lambda Web Adapter]
     A -->|1. check cache| D[(DynamoDB<br/>cache + rate limit)]
@@ -74,7 +80,7 @@ flowchart LR
 
 **Request flow**
 
-1. The browser sends the resume and JD text to the Lambda Function URL.
+1. The browser loads the page from CloudFront (files come from a private S3 bucket). It sends the resume and JD text to the Lambda Function URL.
 2. The backend validates the input and hashes `resume + JD`. If the hash is in the cache, it returns the saved result straight away.
 3. If not, it checks the per-IP daily limit.
 4. It streams the answer from Gemini (falls back to Groq if needed) and forwards each piece to the browser.
@@ -92,7 +98,7 @@ flowchart LR
 | LLMs | Gemini `gemini-3.5-flash-lite`, fallback Groq `openai/gpt-oss-120b` |
 | Infra as code | AWS SAM |
 | Monitoring | CloudWatch Logs, AWS Budget alert |
-| Hosting | S3 + CloudFront (in progress) |
+| Hosting | S3 (private) + CloudFront with Origin Access Control |
 
 ## Privacy
 
@@ -105,7 +111,7 @@ flowchart LR
 
 ```
 .
-├── backend/
+├── src/
 │   ├── app.py            # FastAPI app: validation, cache, rate limit, streaming
 │   ├── llm.py            # Gemini + Groq streaming, retry and fallback
 │   ├── prompt.py         # System prompt and JSON response schema
@@ -115,9 +121,10 @@ flowchart LR
 │   └── requirements.txt
 ├── frontend/
 │   ├── index.html        # Page, PDF reading, stream rendering
-│   └── config.js         # Sets API_URL
+│   └── config.js         # Sets API_URL (gitignored, made by deploy_frontend.sh)
 ├── images/               # Screenshots
-├── template.yaml         # SAM template
+├── template.yaml         # SAM template (Lambda, DynamoDB, S3, CloudFront)
+├── deploy_frontend.sh    # Uploads frontend to S3 and clears CloudFront cache
 └── README.md
 ```
 
@@ -132,38 +139,41 @@ aws ssm put-parameter --name /resume-matcher/gemini-api-key --type SecureString 
 aws ssm put-parameter --name /resume-matcher/groq-key --type SecureString --value "YOUR_GROQ_KEY"
 ```
 
-**2. Build and deploy the backend**
+**2. Build and deploy the stack**
 
 ```bash
 sam build
 sam deploy --guided
 ```
 
-Note the Function URL from the stack outputs.
+This creates the Lambda function, DynamoDB table, S3 bucket and CloudFront distribution. CORS on the Function URL allows only the CloudFront domain and `http://localhost:8000`.
 
-**3. Point the frontend to it**
+**3. Upload the frontend**
 
-Create `frontend/config.js`:
-
-```js
-const API_URL = "https://<your-function-url>.lambda-url.<region>.on.aws/";
+```bash
+chmod +x deploy_frontend.sh
+./deploy_frontend.sh
 ```
 
-**4. Open the page locally**
+This writes `frontend/config.js` from the stack output, syncs `frontend/` to S3 and clears the CloudFront cache. It prints the site URL at the end.
+
+**4. (Optional) Run the page locally**
+
+Create `frontend/config.js` with your Function URL (the script above does this too), then:
 
 ```bash
 cd frontend
-python -m http.server 8000
+python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000`. For this to work, the Function URL must allow your origin in CORS.
+Open `http://localhost:8000` (use `localhost`, not `0.0.0.0`, so it matches the CORS rule).
 
 ## Status
 
 - Backend on AWS Lambda, with Gemini, Groq fallback, cache and rate limit: **done**
 - Streaming result and animated score: **done**
 - PDF upload for resume and JD: **done**
-- Hosting the website on S3 + CloudFront: **in progress**
+- Hosting the website on S3 + CloudFront: **done**
 
 ## Ideas for later
 
